@@ -1,10 +1,13 @@
 class ScantailorAdvanced < Formula
   desc "Interactive post-processing tool for scanned pages (Advanced)"
-  homepage "https://github.com/ScanTailor-Advanced/scantailor-advanced"
-  url "https://github.com/ScanTailor-Advanced/scantailor-advanced/archive/refs/tags/v1.2.1.tar.gz"
-  sha256 "9eb20238378151e32055f8f5c6d67cf0b4c93b77eba3f11266656879c41ac009"
+  homepage "https://github.com/AthanasiusOfAlex/scantailor-advanced"
+  # ScanTailor Advanced 1.2.1 plus the macOS fixes on the fork's macos-arm64 branch.
+  url "https://github.com/AthanasiusOfAlex/scantailor-advanced.git",
+      tag:      "v1.2.1-macos.1",
+      revision: "c256be1b170beb8add5aac921d1c59061301b003"
+  version "1.2.1-macos.1"
   license "GPL-3.0-or-later"
-  head "https://github.com/ScanTailor-Advanced/scantailor-advanced.git", branch: "master"
+  head "https://github.com/AthanasiusOfAlex/scantailor-advanced.git", branch: "macos-arm64"
 
   depends_on "cmake" => :build
   depends_on "boost"
@@ -14,8 +17,15 @@ class ScantailorAdvanced < Formula
   depends_on "qt"
 
   def install
+    # Homebrew's compiler shim replaces -O3 with -Os by default. This is an
+    # image-processing application; -Os costs about 10% in the heavy stages.
+    ENV.O3
+
+    # PORTABLE_VERSION would keep settings next to the executable, i.e. inside the
+    # versioned Cellar directory, where every upgrade or reinstall discards them.
     system "cmake", "-S", ".", "-B", "build",
                     "-DBUILD_TESTS=OFF",
+                    "-DPORTABLE_VERSION=OFF",
                     *std_cmake_args
     system "cmake", "--build", "build"
     system "cmake", "--install", "build"

@@ -17,3 +17,8 @@ build/
 *.tmp
 *~
 dmg_staging/
+
+# Benchmark corpus and results (large, local only)
+testdata/
+bench-results/
+build-*/

@@ -160,6 +160,11 @@ fi
 echo "==> Running macdeployqt (${MACDEPLOYQT})..."
 "${MACDEPLOYQT}" "${APP_TARGET}" -verbose=1
 
+# macdeployqt copies two plugins whose Qt modules (QtPdf, QtVirtualKeyboard) are not
+# part of the bundle; they could never load. ScanTailor uses neither.
+rm -f "${APP_TARGET}/Contents/PlugIns/imageformats/libqpdf.dylib" \
+      "${APP_TARGET}/Contents/PlugIns/platforminputcontexts/libqtvirtualkeyboardplugin.dylib"
+
 # Resolve and bundle non-Qt dynamic libraries & sign
 echo "==> Bundling third-party libraries and code signing..."
 python3 "${SCRIPT_DIR}/fix_dependencies.py" "${APP_TARGET}"
