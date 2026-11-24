@@ -2,7 +2,19 @@
 
 macOS packaging, Homebrew tap, and native App bundler for [ScanTailor Advanced](https://github.com/ScanTailor-Advanced/scantailor-advanced) (v1.2.1).
 
-Built natively for **Apple Silicon (ARM64)** and **Intel (x86_64)** with the **Qt 6** framework.
+Built natively for **Apple Silicon (ARM64)** with the **Qt 6** framework. No Rosetta required.
+
+The formula builds the [`macos-arm64` branch](https://github.com/AthanasiusOfAlex/scantailor-advanced/tree/macos-arm64) of a fork of upstream 1.2.1. That branch adds:
+
+- **Old projects open again.** 1.2.0 raised the project-file version without a format change, so projects saved by 1.0.x and 1.1.x were rejected. They are readable again.
+- **A batch-processing hang is fixed.** A data structure shared between worker threads and the main thread had no locking.
+- **Faster batch runs.** Colour pages load about 40% faster, and work that was only needed for on-screen display is no longer done for every page in a batch. Re-running a stage over an already processed 532-page project takes about a third of the time. Output files are byte-identical.
+- **Thumbnails for projects in OneDrive, Dropbox, Google Drive or iCloud Drive are cached locally** (`~/Library/Caches/scantailor-advanced`), so reopening a project does not download one thumbnail at a time.
+- **Settings live in `~/.config/scantailor-advanced/`**, not next to the executable, so they survive upgrades and the app bundle's signature stays valid.
+
+### Projects in cloud-synced folders
+
+If a project lives in OneDrive (or a similar service) and its files show a cloud icon in Finder, every page ScanTailor touches is downloaded first, at roughly a second per file regardless of size. That, not processing speed, is what makes a large project crawl. Before working on a project, right-click its folder in Finder and choose **Always Keep on This Device**, and wait for the download to finish.
 
 ---
 
@@ -69,7 +81,8 @@ The bundler:
 - Automatically locates the installed `scantailor-advanced` binary.
 - Deploys Qt 6 frameworks and plugins via `macdeployqt`.
 - Automatically copies and relocates all third-party dynamic libraries (`boost`, `libtiff`, `libpng`, `jpeg-turbo`, etc.) into `Contents/Frameworks`.
-- Applies mandatory ad-hoc code signing (`codesign`) required for Apple Silicon AMFI security.
+- Applies mandatory ad-hoc code signing (`codesign`) required for Apple Silicon AMFI security, and verifies it.
+- Sets the bundle's minimum macOS version to what the bundled libraries require. Homebrew libraries are built for the macOS version they were installed on, so the bundle runs on that version or newer.
 - Packages a compressed `.dmg` installer with an `/Applications` shortcut.
 
 ### Steps to Bundle:
@@ -104,17 +117,31 @@ If you prefer building directly with CMake without Homebrew's formula runner:
 # 1. Install dependencies
 brew install cmake boost qt libpng libtiff jpeg-turbo
 
-# 2. Clone upstream ScanTailor Advanced
-git clone https://github.com/ScanTailor-Advanced/scantailor-advanced.git
+# 2. Clone the fork with the macOS fixes
+git clone --branch macos-arm64 https://github.com/AthanasiusOfAlex/scantailor-advanced.git
 cd scantailor-advanced
 
 # 3. Configure and build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF -DPORTABLE_VERSION=OFF
 cmake --build build -j$(sysctl -n hw.ncpu)
 
 # 4. Install
 sudo cmake --install build
 ```
+
+---
+
+## Measuring Performance
+
+`bench/` holds the scripts used to compare builds. They drive the application through a developer-only hook (`SCANTAILOR_PERF_SCRIPT`, see `src/app/PerfDriver.h` in the fork) that creates or opens a project, switches stages, runs batches and reports wall time, CPU time and main-thread stalls.
+
+```bash
+bench/make-corpus.sh                    # render the PDFs in testdata/pdf to page images
+bench/build-ref.sh v1.2.1               # build any revision of the fork into build-v1.2.1/
+bench/scenario-full.sh v1.2.1 large     # full batch, then reopen; results in bench-results/
+```
+
+`testdata/`, `bench-results/` and `build-*/` are not tracked.
 
 ---
 
