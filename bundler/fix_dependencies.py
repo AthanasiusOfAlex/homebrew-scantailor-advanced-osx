@@ -185,8 +185,12 @@ def bundle_dependencies(app_path: Path):
                 new_ref = f"@rpath/{dep_name}"
                 run_cmd(["install_name_tool", "-change", dep, new_ref, str(macho)], check=False)
 
+    update_min_system_version(app_path)
+
     print("==> Applying ad-hoc code signature (required for Apple Silicon)...")
-    # Sign inside out: Frameworks, Plugins, MacOS binaries, then bundle
+    # Sign inside out: nested Mach-O files (deepest first), then framework bundles,
+    # then the application itself. "codesign --deep" is deprecated for signing and
+    # would re-sign nested code with the outer bundle's options.
     for macho in sorted(app_path.rglob("*"), key=lambda p: len(str(p)), reverse=True):
         if is_macho(macho):
             run_cmd(["codesign", "--force", "--sign", "-", str(macho)], check=False)
@@ -195,11 +199,56 @@ def bundle_dependencies(app_path: Path):
         if fw.is_dir():
             run_cmd(["codesign", "--force", "--sign", "-", str(fw)], check=False)
 
-    res = subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(app_path)], capture_output=True, text=True)
+    res = subprocess.run(["codesign", "--force", "--sign", "-", str(app_path)], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"Error during codesign: {res.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+    res = subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app_path)], capture_output=True, text=True)
     if res.returncode == 0:
-        print(f"✔︎ Successfully signed {app_path.name}")
+        print(f"✔︎ Successfully signed and verified {app_path.name}")
     else:
-        print(f"Warning during codesign: {res.stderr}")
+        print(f"Error: signature does not verify: {res.stderr}", file=sys.stderr)
+        sys.exit(1)
+
+
+def min_os_of(macho: Path):
+    """Return the minimum macOS version a Mach-O file was built for, as a tuple, or None."""
+    out = run_cmd(["otool", "-l", str(macho)], check=False)
+    versions = []
+    lines = out.splitlines()
+    for i, line in enumerate(lines):
+        words = line.split()
+        # LC_BUILD_VERSION has "minos X.Y"; the older LC_VERSION_MIN_MACOSX has "version X.Y".
+        if len(words) == 2 and words[0] == "minos":
+            versions.append(words[1])
+        elif len(words) == 2 and words[0] == "version" and any(
+            "LC_VERSION_MIN_MACOSX" in prev for prev in lines[max(0, i - 3):i]
+        ):
+            versions.append(words[1])
+    parsed = [tuple(int(part) for part in v.split(".")) for v in versions]
+    return max(parsed) if parsed else None
+
+
+def update_min_system_version(app_path: Path):
+    """Set LSMinimumSystemVersion to what the bundled binaries actually require.
+
+    Libraries taken from Homebrew are built for the macOS version they were installed
+    on, so the bundle cannot run on anything older no matter what the template says.
+    """
+    newest = None
+    for macho in app_path.rglob("*"):
+        if is_macho(macho):
+            version = min_os_of(macho)
+            if version and (newest is None or version > newest):
+                newest = version
+    if newest is None:
+        return
+    version_str = ".".join(str(part) for part in (newest + (0, 0))[:3])
+    plist = app_path / "Contents" / "Info.plist"
+    run_cmd(["plutil", "-replace", "LSMinimumSystemVersion", "-string", version_str, str(plist)])
+    print(f"==> LSMinimumSystemVersion set to {version_str} (required by the bundled binaries)")
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
