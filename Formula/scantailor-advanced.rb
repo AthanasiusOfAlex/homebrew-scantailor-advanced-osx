@@ -3,9 +3,9 @@ class ScantailorAdvanced < Formula
   homepage "https://github.com/AthanasiusOfAlex/scantailor-advanced"
   # ScanTailor Advanced 1.2.1 plus the macOS fixes on the fork's macos-arm64 branch.
   url "https://github.com/AthanasiusOfAlex/scantailor-advanced.git",
-      tag:      "v1.2.1-macos.1",
-      revision: "c256be1b170beb8add5aac921d1c59061301b003"
-  version "1.2.1-macos.1"
+      tag:      "v1.2.1-macos.2",
+      revision: "b9d4614fb88315e16f5e9cb982bd81f86653b6bc"
+  version "1.2.1-macos.2"
   license "GPL-3.0-or-later"
   head "https://github.com/AthanasiusOfAlex/scantailor-advanced.git", branch: "macos-arm64"
 
